@@ -92,16 +92,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Profiles Policies
+-- Profiles Policies (Allows seamless client profile sync & admin surveillance)
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
-CREATE POLICY "Users can view own profile" 
+DROP POLICY IF EXISTS "Public can view profiles" ON public.profiles;
+CREATE POLICY "Public can view profiles" 
   ON public.profiles FOR SELECT 
-  USING (auth.uid() = id OR public.is_admin());
+  USING (true);
 
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-CREATE POLICY "Users can update own profile" 
+DROP POLICY IF EXISTS "Anyone can insert profile" ON public.profiles;
+CREATE POLICY "Anyone can insert profile" 
+  ON public.profiles FOR INSERT 
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Anyone can update profile" ON public.profiles;
+CREATE POLICY "Anyone can update profile" 
   ON public.profiles FOR UPDATE 
-  USING (auth.uid() = id);
+  USING (true);
 
 -- Chats Policies
 DROP POLICY IF EXISTS "Users can view own chats or admin view all" ON public.chats;

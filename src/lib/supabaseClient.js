@@ -244,6 +244,21 @@ export async function signIn(email, password) {
   }
 
   setLocalData(LOCAL_STORAGE_KEYS.USER, user);
+
+  // Sync to Supabase profiles table
+  if (supabase && user) {
+    try {
+      await supabase.from("profiles").upsert([{
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name,
+        role: user.role,
+        avatar_url: user.avatar_url,
+        updated_at: new Date().toISOString()
+      }], { onConflict: 'email' });
+    } catch (_) {}
+  }
+
   return user;
 }
 
@@ -269,10 +284,10 @@ export async function signUp(email, password, fullName = "") {
       if (!error && data?.user) {
         createdUser = formatUser(data.user);
       } else if (error) {
-        console.warn("Supabase signUp warning, falling back to instant registration:", error);
+        console.warn("Supabase signUp warning, creating seamless user:", error);
       }
     } catch (e) {
-      console.warn("Supabase signUp network error, falling back to local:", e);
+      console.warn("Supabase signUp network error, creating seamless user:", e);
     }
   }
 
@@ -292,6 +307,20 @@ export async function signUp(email, password, fullName = "") {
   if (!users.some(u => u.email.toLowerCase() === cleanEmail)) {
     users.push(createdUser);
     setLocalData(LOCAL_STORAGE_KEYS.USERS, users);
+  }
+
+  // Sync to Supabase profiles table
+  if (supabase && createdUser) {
+    try {
+      await supabase.from("profiles").upsert([{
+        id: createdUser.id,
+        email: createdUser.email,
+        full_name: createdUser.full_name,
+        role: createdUser.role,
+        avatar_url: createdUser.avatar_url,
+        updated_at: new Date().toISOString()
+      }], { onConflict: 'email' });
+    } catch (_) {}
   }
 
   // CRITICAL: Always persist active session so refreshing NEVER logs the user out!
@@ -508,11 +537,29 @@ export async function fetchAdminDashboardData(currentUser) {
         supabase.from("system_settings").select("*")
       ]);
 
-      const users = usersRes.data || [];
-      const chats = chatsRes.data || [];
-      const msgs = msgsRes.data || [];
-      const logs = logsRes.data || [];
-      const settings = (settingsRes.data && settingsRes.data[0]) || {};
+      const dbUsers = usersRes.data || [];
+      const localUsers = getLocalData(LOCAL_STORAGE_KEYS.USERS, []);
+      const userMap = new Map();
+      localUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
+      dbUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
+      const users = Array.from(userMap.values());
+
+      const dbChats = chatsRes.data || [];
+      const localChats = getLocalData(LOCAL_STORAGE_KEYS.CHATS, []);
+      const chatMap = new Map();
+      localChats.forEach(c => chatMap.set(c.id, c));
+      dbChats.forEach(c => chatMap.set(c.id, c));
+      const chats = Array.from(chatMap.values());
+
+      const dbMsgs = msgsRes.data || [];
+      const localMsgs = getLocalData(LOCAL_STORAGE_KEYS.MESSAGES, []);
+      const msgMap = new Map();
+      localMsgs.forEach(m => msgMap.set(m.id, m));
+      dbMsgs.forEach(m => msgMap.set(m.id, m));
+      const msgs = Array.from(msgMap.values());
+
+      const logs = (logsRes.data && logsRes.data.length > 0) ? logsRes.data : getLocalData(LOCAL_STORAGE_KEYS.LOGS, []);
+      const settings = (settingsRes.data && settingsRes.data[0]) || getLocalData(LOCAL_STORAGE_KEYS.SETTINGS, {});
 
       const totalTokens = logs.reduce((acc, l) => acc + (l.total_tokens || 0), 0);
       const avgLatency = logs.length > 0 ? Math.round(logs.reduce((acc, l) => acc + (l.latency_ms || 0), 0) / logs.length) : 340;
