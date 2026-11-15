@@ -5,11 +5,10 @@ import {
   Lock, 
   Mail, 
   AlertCircle, 
-  ArrowRight,
-  Crown
+  ArrowRight
 } from 'lucide-react';
 import NvidiaLogo from './NvidiaLogo';
-import { signIn, signUp, quickLoginAsAdmin } from '../lib/supabaseClient';
+import { signIn, signUp } from '../lib/supabaseClient';
 
 export default function AuthModal({
   isOpen,
@@ -73,38 +72,6 @@ export default function AuthModal({
               ? 'Sign in to send your query and unlock full conversation history.'
               : 'Sign in to access NVIDIA engines and cloud sync.'}
           </p>
-        </div>
-
-        {/* Root Admin Quick Access */}
-        <div className="mb-4 p-3 rounded-xl bg-amber-500/[0.08] border border-amber-500/25">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-1.5 text-xs font-semibold text-amber-300">
-              <Crown className="w-3.5 h-3.5 text-amber-400" />
-              <span>Root Administrator</span>
-            </div>
-            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 font-mono font-bold">
-              1-Click
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={async () => {
-              setLoading(true);
-              const admin = await quickLoginAsAdmin();
-              onAuthSuccess(admin);
-              onClose();
-            }}
-            className="w-full py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors cursor-pointer"
-          >
-            <Crown className="w-3.5 h-3.5 text-slate-950" />
-            <span>Log In as Rishabh (Admin)</span>
-          </button>
-        </div>
-
-        <div className="relative flex py-2 items-center mb-3">
-          <div className="flex-grow border-t border-white/[0.08]"></div>
-          <span className="flex-shrink mx-2 text-[10px] text-slate-500 font-mono uppercase">Or Continue with Email</span>
-          <div className="flex-grow border-t border-white/[0.08]"></div>
         </div>
 
         {/* Error Alert */}
