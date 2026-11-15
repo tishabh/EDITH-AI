@@ -35,7 +35,17 @@ export default function AuthModal({
       if (isSignUp) {
         user = await signUp(email, password, fullName);
       } else {
-        user = await signIn(email, password);
+        try {
+          user = await signIn(email, password);
+        } catch (signInErr) {
+          // If user account is not found or credentials invalid, automatically register and sign up seamlessly!
+          const msg = (signInErr.message || '').toLowerCase();
+          if (msg.includes('invalid') || msg.includes('not found') || msg.includes('credentials')) {
+            user = await signUp(email, password, fullName || email.split('@')[0]);
+          } else {
+            throw signInErr;
+          }
+        }
       }
       onAuthSuccess(user);
       onClose();

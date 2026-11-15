@@ -245,8 +245,18 @@ export async function signIn(email, password) {
 
   setLocalData(LOCAL_STORAGE_KEYS.USER, user);
 
-  // Sync to Supabase profiles table
+  // Sync to Supabase app_users & profiles table
   if (supabase && user) {
+    try {
+      await supabase.from("app_users").upsert([{
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name,
+        role: user.role,
+        avatar_url: user.avatar_url,
+        last_sign_in: new Date().toISOString()
+      }], { onConflict: 'email' });
+    } catch (_) {}
     try {
       await supabase.from("profiles").upsert([{
         id: user.id,
@@ -309,8 +319,18 @@ export async function signUp(email, password, fullName = "") {
     setLocalData(LOCAL_STORAGE_KEYS.USERS, users);
   }
 
-  // Sync to Supabase profiles table
+  // Sync to Supabase app_users & profiles table
   if (supabase && createdUser) {
+    try {
+      await supabase.from("app_users").upsert([{
+        id: createdUser.id,
+        email: createdUser.email,
+        full_name: createdUser.full_name,
+        role: createdUser.role,
+        avatar_url: createdUser.avatar_url,
+        last_sign_in: new Date().toISOString()
+      }], { onConflict: 'email' });
+    } catch (_) {}
     try {
       await supabase.from("profiles").upsert([{
         id: createdUser.id,
@@ -529,7 +549,8 @@ export async function fetchAdminDashboardData(currentUser) {
   const supabase = getSupabase();
   if (supabase) {
     try {
-      const [usersRes, chatsRes, msgsRes, logsRes, settingsRes] = await Promise.all([
+      const [appUsersRes, profilesRes, chatsRes, msgsRes, logsRes, settingsRes] = await Promise.all([
+        supabase.from("app_users").select("*"),
         supabase.from("profiles").select("*"),
         supabase.from("chats").select("*"),
         supabase.from("messages").select("*"),
@@ -537,7 +558,7 @@ export async function fetchAdminDashboardData(currentUser) {
         supabase.from("system_settings").select("*")
       ]);
 
-      const dbUsers = usersRes.data || [];
+      const dbUsers = [...(appUsersRes.data || []), ...(profilesRes.data || [])];
       const localUsers = getLocalData(LOCAL_STORAGE_KEYS.USERS, []);
       const userMap = new Map();
       localUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
