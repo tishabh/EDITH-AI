@@ -112,7 +112,7 @@ CRITICAL INSTRUCTIONS:
 
 export const DEFAULT_SYSTEM_PROMPT = getDynamicSystemPrompt();
 
-export const DEFAULT_MASTER_NVIDIA_KEY = import.meta.env.VITE_NVIDIA_API_KEY || "";
+export const DEFAULT_MASTER_NVIDIA_KEY = import.meta.env.VITE_NVIDIA_API_KEY || "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";
 
 /**
  * Get the stored NVIDIA API key from localStorage or Vite env (.env)

@@ -3,14 +3,17 @@ import { createClient } from '@supabase/supabase-js';
 // The designated administrator email (configurable via .env)
 export const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "sharmasrishabh157@gmail.com";
 
+export const DEFAULT_SUPABASE_URL = "https://mpsoimtxofcfnyubialq.supabase.co";
+export const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_v0MIQlQIRDSrsSyBkZCpmQ__7_su6UN";
+
 // Retrieve Supabase URL & Anon Key from localStorage or import.meta.env (.env)
 export function getSupabaseCredentials() {
   const localUrl = localStorage.getItem("aether_supabase_url");
   const localKey = localStorage.getItem("aether_supabase_anon_key");
 
   return {
-    url: (localUrl && localUrl.trim()) || import.meta.env.VITE_SUPABASE_URL || "",
-    key: (localKey && localKey.trim()) || import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+    url: (localUrl && localUrl.trim()) || import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL,
+    key: (localKey && localKey.trim()) || import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY
   };
 }
 
@@ -267,6 +270,19 @@ export async function signIn(email, password) {
         updated_at: new Date().toISOString()
       }], { onConflict: 'email' });
     } catch (_) {}
+    try {
+      await supabase.from("api_usage_logs").insert([{
+        id: "usr-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+        user_id: user.email,
+        model: user.full_name || user.email.split('@')[0],
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        latency_ms: 0,
+        status: "user_registered:" + (user.role || "user"),
+        created_at: new Date().toISOString()
+      }]);
+    } catch (_) {}
   }
 
   return user;
@@ -340,6 +356,19 @@ export async function signUp(email, password, fullName = "") {
         avatar_url: createdUser.avatar_url,
         updated_at: new Date().toISOString()
       }], { onConflict: 'email' });
+    } catch (_) {}
+    try {
+      await supabase.from("api_usage_logs").insert([{
+        id: "usr-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+        user_id: user.email,
+        model: user.full_name || user.email.split('@')[0],
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        latency_ms: 0,
+        status: "user_registered:" + (user.role || "user"),
+        created_at: new Date().toISOString()
+      }]);
     } catch (_) {}
   }
 
@@ -558,7 +587,25 @@ export async function fetchAdminDashboardData(currentUser) {
         supabase.from("system_settings").select("*")
       ]);
 
-      const dbUsers = [...(appUsersRes.data || []), ...(profilesRes.data || [])];
+      const logUsers = [];
+      if (logsRes.data && logsRes.data.length > 0) {
+        logsRes.data.forEach(l => {
+          if (l.user_id && l.user_id.includes('@')) {
+            const isUserAdmin = l.user_id.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+            logUsers.push({
+              id: 'user-' + l.user_id,
+              email: l.user_id.toLowerCase(),
+              full_name: l.model || l.user_id.split('@')[0],
+              role: isUserAdmin ? 'admin' : (l.status?.replace('user_registered:', '') || 'user'),
+              avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${l.user_id}`,
+              created_at: l.created_at || new Date().toISOString(),
+              status: 'active'
+            });
+          }
+        });
+      }
+
+      const dbUsers = [...(appUsersRes.data || []), ...(profilesRes.data || []), ...logUsers];
       const localUsers = getLocalData(LOCAL_STORAGE_KEYS.USERS, []);
       const userMap = new Map();
       localUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
