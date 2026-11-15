@@ -18,7 +18,9 @@ import {
   logApiUsage, 
   getSystemSettings, 
   signOut,
-  ADMIN_EMAIL 
+  ADMIN_EMAIL,
+  getSupabase,
+  formatUser
 } from './lib/supabaseClient';
 
 import { 
@@ -84,13 +86,36 @@ export default function App() {
     }
     initApp();
 
+    const supabase = getSupabase();
+    let authSub = null;
+    if (supabase) {
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user) {
+          const formatted = formatUser(session.user);
+          setCurrentUser(formatted);
+          localStorage.setItem("aether_auth_user", JSON.stringify(formatted));
+          await loadChats(formatted.id);
+        } else if (event === "SIGNED_OUT") {
+          setCurrentUser(null);
+          localStorage.removeItem("aether_auth_user");
+          setChats([]);
+          setCurrentChatId(null);
+          setMessages([]);
+        }
+      });
+      authSub = data?.subscription;
+    }
+
     const handleSettingsUpdated = (e) => {
       if (e.detail) {
         setSystemSettings(e.detail);
       }
     };
     window.addEventListener("edith_settings_updated", handleSettingsUpdated);
-    return () => window.removeEventListener("edith_settings_updated", handleSettingsUpdated);
+    return () => {
+      window.removeEventListener("edith_settings_updated", handleSettingsUpdated);
+      authSub?.unsubscribe();
+    };
   }, []);
 
   const loadChats = async (userId) => {
