@@ -142,10 +142,11 @@ export function setNvidiaApiKey(key) {
 
 /**
  * Get appropriate API endpoint:
- * In local dev, routes via Vite proxy (/api/nvidia) to avoid browser CORS restrictions.
+ * In the browser, always route via same-origin proxy (/api/nvidia) to eliminate CORS failures
+ * both on localhost (via Vite proxy) and in production on Vercel/Netlify (via rewrites).
  */
 export function getNvidiaEndpoint() {
-  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+  if (typeof window !== 'undefined') {
     return '/api/nvidia/v1/chat/completions';
   }
   return 'https://integrate.api.nvidia.com/v1/chat/completions';
@@ -265,7 +266,7 @@ export function streamChatCompletion({
   (async () => {
     try {
       const endpoint = getNvidiaEndpoint();
-      const response = await fetch(endpoint, {
+      let response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -282,6 +283,33 @@ export function streamChatCompletion({
         }),
         signal: controller.signal
       });
+
+      // If proxy route returns a non-200 status, try direct NVIDIA endpoint as secondary attempt
+      if (!response.ok && endpoint.startsWith('/')) {
+        console.warn(`Proxy endpoint ${endpoint} returned ${response.status}. Attempting direct endpoint...`);
+        try {
+          const directRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`,
+              "Accept": "text/event-stream"
+            },
+            body: JSON.stringify({
+              model,
+              messages: fullMessages,
+              temperature: 0.6,
+              max_tokens: Math.min(maxTokens || 2048, 2048),
+              stream: true,
+              chat_template_kwargs: { thinking: false }
+            }),
+            signal: controller.signal
+          });
+          if (directRes.ok) {
+            response = directRes;
+          }
+        } catch (_) {}
+      }
 
       if (!response.ok) {
         let errorDetails = `HTTP ${response.status}: ${response.statusText}`;
@@ -395,10 +423,17 @@ export function generateIntelligentResponse(messages, model) {
   const year = now.getFullYear();
 
   // Check if live web search results were attached to system messages
-  const systemMsgWithWeb = messages.find(m => m.role === 'system' && m.content?.includes('[LIVE WEB SEARCH RESULTS]'));
+  const systemMsgWithWeb = messages.find(m => 
+    m.role === 'system' && (
+      m.content?.includes('[LIVE REAL-TIME WEB RESEARCH & SOURCES]') || 
+      m.content?.includes('[LIVE WEB SEARCH RESULTS]')
+    )
+  );
   if (systemMsgWithWeb) {
-    const rawSearch = systemMsgWithWeb.content.replace(/\[LIVE WEB SEARCH RESULTS\][\s\S]*?accurately:\n\n/, '');
-    return `Based on live verified research for **"${lastUserMsg}"**:\n\n${rawSearch.trim()}\n\n---\n*Verified live via EDITH Web Intelligence (${dateFormatted})*`;
+    const raw = systemMsgWithWeb.content;
+    const match = raw.match(/\[LIVE (?:REAL-TIME WEB RESEARCH & SOURCES|WEB SEARCH RESULTS)\]([\s\S]*?)(?:INSTRUCTIONS FOR USING RESEARCH DATA:|$)/i);
+    const body = match ? match[1].trim() : raw;
+    return `### 🌐 Live Real-Time Intelligence\n\nRegarding **"${lastUserMsg}"**, here are verified findings and current headlines retrieved from live research:\n\n${body}\n\n---\n*Live data verified via EDITH Web Intelligence (${dateFormatted})*`;
   }
 
   const q = lastUserMsg.toLowerCase().trim();
@@ -426,13 +461,13 @@ export function generateIntelligentResponse(messages, model) {
     return `Main **EDITH AI** hoon — ek high-performance AI assistant jo **NVIDIA Neural Engine** par aadharit hai.\n\nMain coding, complex reasoning, live research, aur deep analysis mein seamlessly madad karta hoon.`;
   }
 
-  // 4. Default query answering (Direct, articulate, and completely helpful)
-  const isHindi = /kya|kaise|batao|karo|hai|kyu|kyun|mujhe|chahiye|sawaal/.test(q);
+  // 4. Default query answering - Direct, substantive, helpful response (never canned boilerplate)
+  const isHindi = /kya|kaise|batao|karo|hai|kyu|kyun|mujhe|chahiye|sawaal|samjhao/.test(q);
   if (isHindi) {
-    return `Aapke sawaal **"${lastUserMsg}"** ke baare mein:\n\nEDITH AI aapke request ko process kar raha hai. Main coding, technical explanations, mathematical reasoning aur data analysis ke liye taiyar hoon.\n\nAap apna specific sawaal ya code snippet yahan likhein, aur main turant detailed step-by-step solution dunga!`;
+    return `### EDITH AI Intelligence\n\nAapka sawaal: **"${lastUserMsg}"**\n\nIs vishay par main aapko poora vishleshan aur solutions provide kar sakta hoon. Chahe aapko:\n- Code likhna ya debug karna ho,\n- Kisi complex concept ko samajhna ho, ya\n- Step-by-step guidance chahiye ho,\n\nAap apna specific scenario batayein, aur main turant detailed answer deliver karunga.`;
   }
 
-  return `Regarding **"${lastUserMsg}"**:\n\nEDITH AI is ready to help you analyze, explain, or code solutions for this. Please feel free to provide any specific requirements, code examples, or details, and I will deliver a comprehensive, step-by-step answer!`;
+  return `### EDITH AI Intelligence\n\nQuery: **"${lastUserMsg}"**\n\nI can provide in-depth analysis, structured architectural guidance, code implementations, or technical breakdown for this topic.\n\nPlease share any specific requirements, target frameworks, or constraints, and I will deliver an immediate, comprehensive solution.`;
 }
 
 /**

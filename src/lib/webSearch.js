@@ -11,23 +11,74 @@ export async function performWebSearch(query) {
     return [];
   }
 
+  const cleanQuery = trimmed.replace(/[?.,!]/g, ' ').trim();
+
+  // 1. Try serverless / local proxy endpoint
   try {
-    const cleanQuery = trimmed.replace(/[?.,!]/g, ' ').trim();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3200);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
     const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}`, {
       signal: controller.signal
     });
     clearTimeout(timeoutId);
 
-    if (!res.ok) return [];
+    if (res.ok) {
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        return data.results;
+      }
+    }
+  } catch (_) {}
 
-    const data = await res.json();
-    return data.results || [];
-  } catch (err) {
-    return [];
-  }
+  // 2. Client-side resilient fallback (Wikipedia + Algolia news - 100% CORS-free)
+  const results = [];
+  try {
+    const wikiRes = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQuery)}&format=json&origin=*&srlimit=4`,
+      { signal: AbortSignal.timeout(3000) }
+    );
+    if (wikiRes.ok) {
+      const data = await wikiRes.json();
+      const items = data.query?.search || [];
+      for (const item of items) {
+        const snippet = item.snippet.replace(/<[^>]+>/g, '').trim();
+        results.push({
+          title: item.title,
+          snippet: snippet,
+          source: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
+          domain: 'wikipedia.org'
+        });
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const hnRes = await fetch(
+      `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(cleanQuery)}&tags=story&hitsPerPage=3`,
+      { signal: AbortSignal.timeout(3000) }
+    );
+    if (hnRes.ok) {
+      const data = await hnRes.json();
+      const hits = data.hits || [];
+      for (const hit of hits) {
+        if (hit.title && hit.url) {
+          let domain = 'news';
+          try {
+            domain = new URL(hit.url).hostname.replace(/^www\./, '');
+          } catch (_) {}
+          results.push({
+            title: hit.title,
+            snippet: `Live item: ${hit.title} (${hit.points || 0} points, ${hit.num_comments || 0} comments)`,
+            source: hit.url,
+            domain
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  return results.slice(0, 5);
 }
 
 /**
